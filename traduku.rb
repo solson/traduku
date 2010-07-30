@@ -5,7 +5,7 @@ require 'rubygems'
 require 'sequel'
 require 'net/http'
 require 'nokogiri'
-require '../on_irc/lib/on_irc'
+require 'on_irc'
 
 # the DB stores accented characters as these arbitrary plain characters
 SPECIAL_FROM = 'qQ@#{}[]xXwW'
