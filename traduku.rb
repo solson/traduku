@@ -3,16 +3,18 @@
 
 require 'rubygems'
 require 'sequel'
-require 'on_irc'
+require 'net/http'
+require 'nokogiri'
+require '../on_irc/lib/on_irc'
 
 # the DB stores accented characters as these arbitrary plain characters
 SPECIAL_FROM = 'qQ@#{}[]xXwW'
 SPECIAL_TO   = 'ĉĈĝĜĥĤĵĴŝŜŭŬ'
 
 puts 'Connecting to databases...'
-EN = Sequel.connect('sqlite://english.sqlite')
+EN = Sequel.connect('sqlite://english.sqlite', :encoding => 'UTF-8')
 puts '  connected to english.sqlite.'
-EO = Sequel.connect('sqlite://esperanto.sqlite')
+EO = Sequel.connect('sqlite://esperanto.sqlite', :encoding => 'UTF-8')
 puts '  connected to esperanto.sqlite.'
 puts
 
@@ -21,13 +23,13 @@ irc = IRC.new do
   ident 'eo'
   realname 'Esperanto<->English translator/tradukilo'
 
-  server :eighthbit do
-    address 'irc.eighthbit.net'
+  server :ninthbit do
+    address 'localhost'
   end
 end
 
-irc[:eighthbit].on '001' do
-  join '#offtopic,#bots'
+irc[:ninthbit].on '001' do
+  join '#programming'
 end
 
 irc.on :privmsg do
@@ -35,13 +37,21 @@ irc.on :privmsg do
     word = $1
     
     if word[0,1] == '!'
-      command = word[1..-1]
+      command, args = word[1..-1].split(' ', 2)
 
       case command
       when 'help'
         respond(sender.nick + ': Tell me a word and I will translate it from English to Esperanto or Esperanto to English.')
       when 'helpo'
         respond(sender.nick + ': Diru al mi vorton kaj mi tradukos ĝi de la angla al Esperanto aŭ Esperanto al la angla.')
+      when 'en'
+        doc = Nokogiri::HTML(Net::HTTP.post_form(URI.parse('http://traduku.net/cgi-bin/traduku'), {'en_eo_apertium' => 'EN → EO', 't' => args}).body)
+        res = doc.at_css('#rezulto')
+        respond(sender.nick + ': ' + res.inner_text.strip.gsub(/\s+/, ' ')) if res
+      when 'eo'
+        doc = Nokogiri::HTML(Net::HTTP.post_form(URI.parse('http://traduku.net/cgi-bin/traduku'), {'eo_en_apertium' => 'EO → EN', 't' => args}).body)
+        res = doc.at_css('#rezulto')
+        respond(sender.nick + ': ' + res.inner_text.strip.gsub(/\s+/, ' ')) if res
       end
 
       next
@@ -64,7 +74,7 @@ irc.on :privmsg do
     elsif !eng_words.empty?
       response = sender.nick + ': ' + eng_words.join(', ')
     else
-      response = sender.nick + ': No results. | Ne resultoj.'
+      response = sender.nick + ': No results. | Neniaj resultoj.'
     end
 
     response << ' | For help, use !help' if word == 'help'
