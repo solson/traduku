@@ -5,7 +5,7 @@ require 'rubygems'
 require 'sequel'
 require 'net/http'
 require 'nokogiri'
-require 'on_irc'
+require 'cinch'
 
 # the DB stores accented characters as these arbitrary plain characters
 SPECIAL_FROM = 'qQ@#{}[]xXwW'
@@ -18,40 +18,32 @@ EO = Sequel.connect('sqlite://esperanto.sqlite', :encoding => 'UTF-8')
 puts '  connected to esperanto.sqlite.'
 puts
 
-irc = IRC.new do
-  nick 'traduku'
-  ident 'eo'
-  realname 'Esperanto<->English translator/tradukilo'
-
-  server :ninthbit do
-    address 'localhost'
+bot = Cinch::Bot.new do
+  configure do |c|
+    c.server   = "localhost"
+    c.nick     = "traduku"
+    c.username = "eo"
+    c.realname = "Esperanto<->English translator/tradukilo"
+    c.channels = ["#programming", "#offtopic", "#bots"]
   end
-end
 
-irc[:ninthbit].on '001' do
-  join '#programming,#offtopic,#bots'
-end
-
-irc.on :privmsg do
-  if params[1] =~ /^traduku[:,]?\s+(.*)$/
-    word = $1
-    
+  on :message, /^#{Regexp.escape nick}[:,]?\s+(.+)$/ do |m, word|
     if word[0,1] == '!'
       command, args = word[1..-1].split(' ', 2)
 
       case command
       when 'help'
-        respond(sender.nick + ': Tell me a word and I will translate it from English to Esperanto or Esperanto to English.')
+        m.reply(m.user.nick + ': Tell me a word and I will translate it from English to Esperanto or Esperanto to English.')
       when 'helpo'
-        respond(sender.nick + ': Diru al mi vorton kaj mi tradukos ĝi de la angla al Esperanto aŭ Esperanto al la angla.')
+        m.reply(m.user.nick + ': Diru al mi vorton kaj mi tradukos ĝi de la angla al Esperanto aŭ Esperanto al la angla.')
       when 'en'
         doc = Nokogiri::HTML(Net::HTTP.post_form(URI.parse('http://traduku.net/cgi-bin/traduku'), {'en_eo_apertium' => 'EN → EO', 't' => args}).body)
         res = doc.at_css('#rezulto')
-        respond(sender.nick + ': ' + res.inner_text.strip.gsub(/\s+/, ' ')) if res
+        m.reply(m.user.nick + ': ' + res.inner_text.strip.gsub(/\s+/, ' ')) if res
       when 'eo'
         doc = Nokogiri::HTML(Net::HTTP.post_form(URI.parse('http://traduku.net/cgi-bin/traduku'), {'eo_en_apertium' => 'EO → EN', 't' => args}).body)
         res = doc.at_css('#rezulto')
-        respond(sender.nick + ': ' + res.inner_text.strip.gsub(/\s+/, ' ')) if res
+        m.reply(m.user.nick + ': ' + res.inner_text.strip.gsub(/\s+/, ' ')) if res
       end
 
       next
@@ -68,30 +60,21 @@ irc.on :privmsg do
 
     # choose what to show
     if !esp_words.empty? and !eng_words.empty?
-      response = sender.nick + ': [en->eo] ' + esp_words.join(', ') + ' | ' + '[eo->en] ' + eng_words.join(', ')
+      response = m.user.nick + ': [en->eo] ' + esp_words.join(', ') + ' | ' + '[eo->en] ' + eng_words.join(', ')
     elsif !esp_words.empty?
-      response = sender.nick + ': ' + esp_words.join(', ')
+      response = m.user.nick + ': ' + esp_words.join(', ')
     elsif !eng_words.empty?
-      response = sender.nick + ': ' + eng_words.join(', ')
+      response = m.user.nick + ': ' + eng_words.join(', ')
     else
-      response = sender.nick + ': No results. | Neniaj resultoj.'
+      response = m.user.nick + ': No results. | Neniaj resultoj.'
     end
 
     response << ' | For help, use !help' if word == 'help'
     response << ' | Por helpo, uzu !helpo' if word == 'helpo'
 
-    respond(response)
+    m.reply(response)
   end
 end
 
-irc.on :all do
-  pre = "(#{sender}) " unless sender.empty?
-  puts "#{server.name}: #{pre}#{command} #{params.inspect}"
-end
-
-irc.on :ping do
-  pong params[0]
-end
-
-irc.connect
+bot.start
 
