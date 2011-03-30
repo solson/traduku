@@ -29,7 +29,7 @@ irc = IRC.new do
 end
 
 irc[:ninthbit].on '001' do
-  join '#programming'
+  join '#programming,#offtopic,#bots'
 end
 
 irc.on :privmsg do
