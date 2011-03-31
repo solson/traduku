@@ -13,7 +13,6 @@ bot = Cinch::Bot.new do
   configure do |c|
     c.server   = "localhost"
     c.nick     = "traduku"
-    c.username = "eo"
     c.realname = "Esperanto<->English translator/tradukilo"
     c.channels = ["#bots"] #"#programming", "#offtopic",
   end
