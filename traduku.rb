@@ -2,22 +2,10 @@
 # encoding: utf-8
 
 require 'rubygems'
-require 'sequel'
 require 'net/http'
 require 'cgi'
 require 'nokogiri'
 require 'cinch'
-
-# the DB stores accented characters as these arbitrary plain characters
-SPECIAL_FROM = 'qQ@#{}[]xXwW'
-SPECIAL_TO   = 'ĉĈĝĜĥĤĵĴŝŜŭŬ'
-
-puts 'Connecting to databases...'
-EN = Sequel.connect('sqlite://english.sqlite', :encoding => 'UTF-8')
-puts '  connected to english.sqlite.'
-EO = Sequel.connect('sqlite://esperanto.sqlite', :encoding => 'UTF-8')
-puts '  connected to esperanto.sqlite.'
-puts
 
 LERNU_LANGS = %w[ar bg ca cs da de el en es eo fa fi fr ga he hi hr hsb hu it ja ko lt nl no pl pt ro ru sk sl sr sv sw th tr uk vi zh]
 
