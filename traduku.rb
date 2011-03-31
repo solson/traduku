@@ -14,7 +14,7 @@ bot = Cinch::Bot.new do
     c.server   = "localhost"
     c.nick     = "traduku"
     c.realname = "Esperanto<->English translator/tradukilo"
-    c.channels = ["#bots"] #"#programming", "#offtopic",
+    c.channels = ["#bots", "#programming", "#offtopic"]
   end
 
   on :message, /^#{Regexp.escape nick}[:,]?\s+(.+)$/ do |m, word|
