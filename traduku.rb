@@ -78,29 +78,35 @@ bot = Cinch::Bot.new do
 
     case command
     when 'help'
-        m.user.notice('Syntax: "<fromlang>-<tolang> <word>". If you use Esperanto (eo) for either of the languages, lernu.net single-word translation will be used. Otherwise, Google Translate is used.')
+        m.user.notice('Syntax: "<lang-lang-...> <words>". If you use Esperanto (eo) for either of the languages, lernu.net single-word translation will be used. Otherwise, Google Translate is used.')
         m.user.notice('Lernu.net languages: ' + LERNU_LANGS.join(', '))
         m.user.notice('Google \'from\' languages: ' + GOOGLE_FROM_LANGS.join(', '))
         m.user.notice('Google \'to\' languages: ' + GOOGLE_TO_LANGS.join(', '))
     when 'helpo'
-        m.user.notice('Sintakso: "<delingvo>-<allingvo> <vorto>". Ĉu vi uzas Esperanton (eo) por ĉu de la lingvoj, lernu.net unuopa-vorton tradukanton uzos. Kontraŭe, Google Tradukanton uzas.')
+        m.user.notice('Sintakso: "<lingvo-lingvo-...> <vortoj>". Ĉu vi uzas Esperanton (eo) por ĉu de la lingvoj, lernu.net unuopa-vorton tradukanton uzos. Kontraŭe, Google Tradukanton uzas.')
         m.user.notice('Lernu.net lingvoj: ' + LERNU_LANGS.join(', '))
         m.user.notice('Google allingvoj: ' + GOOGLE_FROM_LANGS.join(', '))
         m.user.notice('Google delingvoj: ' + GOOGLE_TO_LANGS.join(', '))
     when 'en-sentence'
       doc = Nokogiri::HTML(Net::HTTP.post_form(URI.parse('http://traduku.net/cgi-bin/traduku'), {'en_eo_apertium' => 'EN → EO', 't' => args}).body)
       res = doc.at_css('#rezulto')
-      m.reply(m.user.nick + ': ' + res.inner_text.strip.gsub(/\s+/, ' ')) if res
+      m.reply(res.inner_text.strip.gsub(/\s+/, ' '), true) if res
     when 'eo-sentence'
       doc = Nokogiri::HTML(Net::HTTP.post_form(URI.parse('http://traduku.net/cgi-bin/traduku'), {'eo_en_apertium' => 'EO → EN', 't' => args}).body)
       res = doc.at_css('#rezulto')
-      m.reply(m.user.nick + ': ' + res.inner_text.strip.gsub(/\s+/, ' ')) if res
+      m.reply(res.inner_text.strip.gsub(/\s+/, ' '), true) if res
     else
-      fromlang, tolang = command.split('-')
+      langs = command.split('-')
+
+      if langs.count > 5
+        m.reply("You may use only 5 languages in a chain. | Vi nur povas uzi 5 lingvojn en ĉeno.", true)
+        next
+      end
+
       # If at least one of the languages is Esperanto (eo), use lernu.net.
       # Otherwise, use google translate.
-      if LERNU_LANGS.include?(fromlang) && LERNU_LANGS.include?(tolang) && (fromlang == 'eo' || tolang == 'eo')
-        words = lernu_translate(fromlang, tolang, args)
+      if langs.count == 2 && LERNU_LANGS.include?(langs[0]) && LERNU_LANGS.include?(langs[1]) && (langs[0] == 'eo' || langs[1] == 'eo')
+        words = lernu_translate(langs[0], langs[1], args)
 
         case words.length
         when 0
@@ -115,13 +121,17 @@ bot = Cinch::Bot.new do
             m.reply(words.map(&:first).join(', '))
           end
         end
-      elsif GOOGLE_FROM_LANGS.include?(fromlang) && GOOGLE_TO_LANGS.include?(tolang)
-        m.reply(HTMLEntities.decode_entities(gt.translate(fromlang, tolang, args)), true)
-      elsif %w[det detect].include?(fromlang) && GOOGLE_TO_LANGS.include?(tolang)
+      elsif langs.count > 1 && langs[0..-2].all?{|lang| GOOGLE_FROM_LANGS.include?(lang) } && langs[1..-1].all?{|lang| GOOGLE_TO_LANGS.include?(lang) }
+        text = args
+        langs.each_cons(2).each do |fromlang, tolang|
+          text = HTMLEntities.decode_entities(gt.translate(fromlang, tolang, text))
+        end
+        m.reply(text, true)
+      elsif langs.count == 2 && %w[det detect].include?(langs[0]) && GOOGLE_TO_LANGS.include?(langs[1])
         detected_fromlang = gt.detect_language(args)['language']
-        m.reply("(Detected as #{detected_fromlang}) " + HTMLEntities.decode_entities(gt.translate(detected_fromlang, tolang, args)))
+        m.reply("(Detected as #{detected_fromlang}) " + HTMLEntities.decode_entities(gt.translate(detected_fromlang, langs[1], args)))
       else
-        m.reply('Invalid language pair. Try "help". | Malvalidaj lingvoj duoj. Provu "helpo".', true)
+        m.reply('Invalid syntax. Try "help". | Malvalida sintakso. Provu "helpo".', true)
       end
     end
   end
