@@ -1,22 +1,26 @@
 #!/usr/bin/env ruby
 # encoding: utf-8
-
-require 'rubygems'
 require 'net/http'
 require 'cgi'
 require 'nokogiri'
-require 'google_translate'
-require 'htmlentities'
+require 'bing_translator'
 require 'cinch'
 
-LERNU_LANGS = %w[ar bg ca cs da de el en es eo fa fi fr ga he hi hr hsb hu it ja ko lt nl no pl pt ro ru sk sl sr sv sw th tr uk vi zh]
+# Max length for chained translation (lang1 -> lang2 -> ... -> langN)
+MAX_CHAIN_LENGTH = 5
 
-gt = Google::Translator.new
-glangs = gt.supported_languages
-GOOGLE_FROM_LANGS = glangs[:from_languages].map(&:code)
-GOOGLE_TO_LANGS = glangs[:to_languages].map(&:code)
+TRADUKU_URL = URI.parse('http://traduku.net/cgi-bin/traduku')
 
-# This method is an abomination. It was translated from a Python plasmoid interface to lernu.net.
+# Languages supported by lernu.net's translation service. All only supported
+# to or from Esperanto.
+LERNU_LANGS = %w[ar bg ca cs da de el en es eo fa fi fr ga he hi hr hsb hu it
+                 ja ko lt nl no pl pt ro ru sk sl sr sv sw th tr uk vi zh]
+
+bt = BingTranslator.new(File.read("bing_api_key").chomp)
+BING_LANGS = bt.supported_language_codes
+
+# This method is an abomination. It was translated from a Python plasmoid
+# interface to lernu.net.
 def lernu_translate(fromlang, tolang, args)
   params = {'delingvo' => fromlang, 'allingvo' => tolang, 'modelo' => args}
   domain = 'lernu.net'
@@ -40,7 +44,7 @@ def lernu_translate(fromlang, tolang, args)
         if word.length > 2 && word[2] != ""
           newline += " (" + word[2].gsub("/", "·")
           if word.length > 3 && word[3] != ""
-            newline += " <- " + word[3]
+            newline += " ← " + word[3]
           end
           newline += ")"
         end
@@ -67,50 +71,49 @@ end
 
 bot = Cinch::Bot.new do
   configure do |c|
-    c.server   = "localhost"
+    c.server   = "irc.tenthbit.net"
     c.nick     = "traduku"
     c.realname = "Universal translator. Uses lernu.net for Esperanto."
-    c.channels = ["#bots", "#programming", "#offtopic"]
+#    c.channels = ["#bots", "#programming", "#offtopic"]
+    c.channels = ["#bots"]
   end
 
-  on :message, /^#{Regexp.escape nick}[:,]?\s+(.+)$/ do |m, word|
+  on :message, /^#{Regexp.escape(nick)}\S*[:,]?\s+(.+)$/ do |m, word|
     command, args = word.split(' ', 2)
 
     case command
     when 'help'
-        m.user.notice('Syntax: "<lang-lang-...> <words>". If you use Esperanto (eo) for either of the languages, lernu.net single-word translation will be used. Otherwise, Google Translate is used.')
+        m.user.notice('Syntax: "<lang-lang-...> <words>". If you use ' +
+                      'Esperanto (eo) for either of the languages, ' +
+                      'lernu.net single-word translation will be used. ' +
+                      'Otherwise, Bing Translator is used.')
+
         m.user.notice('Lernu.net languages: ' + LERNU_LANGS.join(', '))
-        m.user.notice('Google \'from\' languages: ' + GOOGLE_FROM_LANGS.join(', '))
-        m.user.notice('Google \'to\' languages: ' + GOOGLE_TO_LANGS.join(', '))
-    when 'helpo'
-        m.user.notice('Sintakso: "<lingvo-lingvo-...> <vortoj>". Ĉu vi uzas Esperanton (eo) por ĉu de la lingvoj, lernu.net unuopa-vorton tradukanton uzos. Kontraŭe, Google Tradukanton uzas.')
-        m.user.notice('Lernu.net lingvoj: ' + LERNU_LANGS.join(', '))
-        m.user.notice('Google allingvoj: ' + GOOGLE_FROM_LANGS.join(', '))
-        m.user.notice('Google delingvoj: ' + GOOGLE_TO_LANGS.join(', '))
+        m.user.notice('Bing languages: ' + BING_LANGS.join(', '))
     when 'en-sentence'
-      doc = Nokogiri::HTML(Net::HTTP.post_form(URI.parse('http://traduku.net/cgi-bin/traduku'), {'en_eo_apertium' => 'EN → EO', 't' => args}).body)
+      doc = Nokogiri::HTML(Net::HTTP.post_form(TRADUKU_URL, {'en_eo_apertium' => 'EN → EO', 't' => args}).body)
       res = doc.at_css('#rezulto')
       m.reply(res.inner_text.strip.gsub(/\s+/, ' '), true) if res
     when 'eo-sentence'
-      doc = Nokogiri::HTML(Net::HTTP.post_form(URI.parse('http://traduku.net/cgi-bin/traduku'), {'eo_en_apertium' => 'EO → EN', 't' => args}).body)
+      doc = Nokogiri::HTML(Net::HTTP.post_form(TRADUKU_URL, {'eo_en_apertium' => 'EO → EN', 't' => args}).body)
       res = doc.at_css('#rezulto')
       m.reply(res.inner_text.strip.gsub(/\s+/, ' '), true) if res
     else
       langs = command.split('-')
 
-      if langs.count > 5
-        m.reply("You may use only 5 languages in a chain. | Vi nur povas uzi 5 lingvojn en ĉeno.", true)
+      if langs.count > MAX_CHAIN_LENGTH
+        m.reply("You may use only #{MAX_CHAIN_LENGTH} languages in a chain.", true)
         next
       end
 
       # If at least one of the languages is Esperanto (eo), use lernu.net.
-      # Otherwise, use google translate.
+      # Otherwise, use Bing Translator.
       if langs.count == 2 && LERNU_LANGS.include?(langs[0]) && LERNU_LANGS.include?(langs[1]) && (langs[0] == 'eo' || langs[1] == 'eo')
         words = lernu_translate(langs[0], langs[1], args)
 
         case words.length
         when 0
-          m.reply("No results! | Neniuj resultoj!")
+          m.reply("No results!")
         when 1
           m.reply(words[0].join)
         else
@@ -121,17 +124,17 @@ bot = Cinch::Bot.new do
             m.reply(words.map(&:first).join(', '))
           end
         end
-      elsif langs.count > 1 && langs[0..-2].all?{|lang| GOOGLE_FROM_LANGS.include?(lang) } && langs[1..-1].all?{|lang| GOOGLE_TO_LANGS.include?(lang) }
+      elsif langs.count > 1 && langs.all?{|lang| BING_LANGS.include?(lang) }
         text = args
-        langs.each_cons(2).each do |fromlang, tolang|
-          text = HTMLEntities.decode_entities(gt.translate(fromlang, tolang, text))
+        langs.each_cons(2) do |fromlang, tolang|
+          text = bt.translate(text, :from => fromlang, :to => tolang)
         end
         m.reply(text, true)
-      elsif langs.count == 2 && %w[det detect].include?(langs[0]) && GOOGLE_TO_LANGS.include?(langs[1])
-        detected_fromlang = gt.detect_language(args)['language']
-        m.reply("(Detected as #{detected_fromlang}) " + HTMLEntities.decode_entities(gt.translate(detected_fromlang, langs[1], args)))
+      elsif langs.count == 2 && %w[det detect].include?(langs[0]) && BING_LANGS.include?(langs[1])
+        detected_fromlang = bt.detect(args)
+        m.reply("(Detected as #{detected_fromlang}) " + bt.translate(args, :from => detected_fromlang, :to => langs[1]))
       else
-        m.reply('Invalid syntax. Try "help". | Malvalida sintakso. Provu "helpo".', true)
+        m.reply('Invalid syntax. Try "help".', true)
       end
     end
   end
