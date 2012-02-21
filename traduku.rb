@@ -77,7 +77,7 @@ bot = Cinch::Bot.new do
     c.channels = ["#bots", "#programming", "#offtopic"]
   end
 
-  on :message, /^#{Regexp.escape(nick)}\S*[:,]?\s+(.+)$/ do |m, word|
+  on :message, /^#{Regexp.escape(nick)}\S*[:,]\s*(.+)$/ do |m, word|
     command, args = word.split(' ', 2)
 
     case command
