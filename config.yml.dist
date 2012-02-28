@@ -1,0 +1,6 @@
+nick: traduku
+server: irc.example.net
+channels:
+  - '#example'
+max-chain-length: 5
+bing-api-key: BLAHBLAHBLAH
