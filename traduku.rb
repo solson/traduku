@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 # encoding: utf-8
+require 'bundler/setup'
 require 'net/http'
 require 'cgi'
 require 'nokogiri'
